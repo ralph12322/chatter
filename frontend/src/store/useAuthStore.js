@@ -60,14 +60,14 @@ export const useAuthStore = create((set, get) => ({
   
   logout: async () => {
     try {
-      await axiosInstance.post("/auth/logout");
+      await axiosInstance.post("/auth/logout", {}, { withCredentials: true });
       set({ authUser: null });
       toast.success("Logged out successfully");
       get().disconnectSocket();
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to logout");
     }
-  },
+  },  
 
   updateProfile: async (data) => {
     set({ isUpdatingProfile: true });
