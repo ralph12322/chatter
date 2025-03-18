@@ -9,7 +9,7 @@ const NoChatSelected = () => {
           <div className="relative">
             <div
               className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center
-             justify-center animate-[swing_1s_ease-in-out_infinite]"
+             justify-center animate-wiggle"
             >
               <MessageSquare className="w-8 h-8 text-primary " />
             </div>
