@@ -22,7 +22,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
 app.use(
   cors({
-    origin: "https://chatter-sigma-five.vercel.app/",
+    origin: "https://chatter-sigma-five.vercel.app",
     credentials: true,
   })
 );
