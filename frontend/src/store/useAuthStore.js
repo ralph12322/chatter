@@ -84,23 +84,49 @@ export const useAuthStore = create((set, get) => ({
   },
 
   connectSocket: () => {
-    const { authUser } = get();
-    if (!authUser || get().socket?.connected) return;
-
-    const socket = io(BASE_URL, {
-      query: {
-        userId: authUser._id,
-      },
+    const { authUser, socket } = get();
+    if (!authUser) return;
+    
+    // Avoid creating multiple socket connections
+    if (socket && socket.connected) return;
+  
+    const newSocket = io(BASE_URL, {
+      query: { userId: authUser._id },
+      transports: ["websocket"],
     });
-    socket.connect();
-
-    set({ socket: socket });
-
-    socket.on("getOnlineUsers", (userIds) => {
+  
+    newSocket.on("connect", () => {
+      console.log("Socket connected:", newSocket.id);
+    });
+  
+    newSocket.on("connect_error", (err) => {
+      console.error("Socket connection error:", err.message);
+      toast.error("Failed to connect to server.");
+    });
+  
+    newSocket.on("disconnect", (reason) => {
+      console.log("Socket disconnected:", reason);
+      if (reason === "io server disconnect") {
+        // The disconnection was initiated by the server, so reconnect manually
+        newSocket.connect();
+      }
+    });
+  
+    newSocket.on("getOnlineUsers", (userIds) => {
+      console.log("Online Users:", userIds);
       set({ onlineUsers: userIds });
     });
+  
+    set({ socket: newSocket });
   },
+  
   disconnectSocket: () => {
-    if (get().socket?.connected) get().socket.disconnect();
+    const { socket } = get();
+    if (socket) {
+      socket.disconnect();
+      console.log("Socket disconnected manually");
+      set({ socket: null, onlineUsers: [] });
+    }
   },
+  
 }));
