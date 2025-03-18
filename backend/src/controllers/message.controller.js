@@ -29,7 +29,7 @@ export const getMessages = async (req, res) => {
           { senderId: userToChatId, receiverId: myId }
         ]
       })
-      .sort({ createdAt: -1 }) // Recent messages first
+      .sort({ createdAt: 1 }) // Recent messages first
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
 
