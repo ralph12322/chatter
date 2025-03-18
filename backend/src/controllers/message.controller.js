@@ -46,7 +46,7 @@ export const sendMessage = async (req, res) => {
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
-    // 1. Emit message instantly for faster UI feedback
+    // Emit instantly for UI responsiveness
     const tempMessage = {
       _id: new Date().getTime().toString(),
       senderId,
@@ -61,10 +61,10 @@ export const sendMessage = async (req, res) => {
       io.to(receiverSocketId).emit("newMessage", tempMessage);
     }
 
-    // 2. Respond immediately to frontend (no waiting for uploads)
+    // Respond instantly, don't wait for uploads or DB saves
     res.status(201).json(tempMessage);
 
-    // 3. Perform Cloudinary upload + DB save in the background
+    // Background: Upload + Save
     (async () => {
       let imageUrl = null;
       if (image) {
@@ -75,18 +75,21 @@ export const sendMessage = async (req, res) => {
         imageUrl = uploadResult.secure_url;
       }
 
-      await messageModel.insertMany([
-        {
-          senderId,
-          receiverId,
-          text,
-          image: imageUrl,
-        },
-      ]);
-    })().catch((error) => console.log("Background save failed:", error.message));
+      // Save to DB without blocking the frontend
+      await messageModel.create({
+        senderId,
+        receiverId,
+        text,
+        image: imageUrl,
+      });
 
+      // Optional: Emit again with the saved message (if necessary)
+      const savedMessage = await messageModel.findOne({ senderId, receiverId, text }).sort({ createdAt: -1 });
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("newMessage", savedMessage);
+      }
+    })();
   } catch (error) {
     console.log("Error in sendMessages controller:", error.message);
-    res.status(500).json({ error: "Internal server error" });
   }
 };
