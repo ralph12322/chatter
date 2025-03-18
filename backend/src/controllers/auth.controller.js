@@ -94,15 +94,14 @@ export const logout = (req, res) => {
   try {
     res.cookie("jwt", "", {
       httpOnly: true,
-      secure: true,  // Set to true if you're using HTTPS (like Vercel)
-      sameSite: "Lax",
-      maxAge: 0
+      secure: true, // Ensure it's true if you're using HTTPS
+      sameSite: "None",
+      expires: new Date(0),
     });
-    
-    res.status(200).json({message: "Logged out Successfully"})
+    res.status(200).json({ message: "Logged out Successfully" });
   } catch (error) {
-    console.log("Error in logout controller")
-    res.status(500).json({message: "Internal server error"})
+    console.log("Error in logout controller", error.message);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
