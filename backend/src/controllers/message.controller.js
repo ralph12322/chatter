@@ -45,9 +45,8 @@ export const sendMessage = async (req, res) => {
     const { text, image } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
-    let imageUrl = null;
 
-    // Emit message instantly to improve responsiveness
+    // 1. Emit message instantly for faster UI feedback
     const tempMessage = {
       _id: new Date().getTime().toString(),
       senderId,
@@ -56,32 +55,36 @@ export const sendMessage = async (req, res) => {
       image: null,
       createdAt: new Date().toISOString(),
     };
+
     const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("newMessage", tempMessage);
     }
 
-    // Upload image (if any) in parallel
-    const imageUploadPromise = image
-      ? cloudinary.uploader.upload(image, {
-          eager: [{ width: 300, height: 300, crop: "scale" }],
-          timeout: 5000,  // Set a timeout for Cloudinary
-        })
-      : null;
-
-    // Save message to DB (non-blocking)
-    const [uploadResult] = await Promise.all([imageUploadPromise]);
-
-    const message = new messageModel({
-      senderId,
-      receiverId,
-      text,
-      image: uploadResult ? uploadResult.secure_url : null,
-    });
-
-    message.save().catch((error) => console.log("Message save failed:", error.message));
-
+    // 2. Respond immediately to frontend (no waiting for uploads)
     res.status(201).json(tempMessage);
+
+    // 3. Perform Cloudinary upload + DB save in the background
+    (async () => {
+      let imageUrl = null;
+      if (image) {
+        const uploadResult = await cloudinary.uploader.upload(image, {
+          eager: [{ width: 300, height: 300, crop: "scale" }],
+          timeout: 5000,
+        });
+        imageUrl = uploadResult.secure_url;
+      }
+
+      await messageModel.insertMany([
+        {
+          senderId,
+          receiverId,
+          text,
+          image: imageUrl,
+        },
+      ]);
+    })().catch((error) => console.log("Background save failed:", error.message));
+
   } catch (error) {
     console.log("Error in sendMessages controller:", error.message);
     res.status(500).json({ error: "Internal server error" });
