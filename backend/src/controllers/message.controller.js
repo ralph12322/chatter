@@ -20,17 +20,22 @@ export const getMessages = async (req, res) => {
   try {
     const { id: userToChatId } = req.params;
     const myId = req.user._id;
+    const { page = 1, limit = 20 } = req.query;
 
-    const messages = await messageModel.find({
-      $or: [
-        { senderId: myId, receiverId: userToChatId },
-        { senderId: userToChatId, receiverId: myId }
-      ]
-    })
+    const messages = await messageModel
+      .find({
+        $or: [
+          { senderId: myId, receiverId: userToChatId },
+          { senderId: userToChatId, receiverId: myId }
+        ]
+      })
+      .sort({ createdAt: -1 }) // Recent messages first
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
 
     res.status(200).json(messages);
   } catch (error) {
-    console.log("Error in getMessages controller: ", error.message);
+    console.log("Error in getMessages controller:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 }
@@ -42,9 +47,9 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user._id;
     let imageUrl = null;
 
-    // Emit the message instantly to speed up UI feedback
+    // Emit message instantly to improve responsiveness
     const tempMessage = {
-      _id: new Date().getTime().toString(),  // Temporary ID for frontend
+      _id: new Date().getTime().toString(),
       senderId,
       receiverId,
       text,
@@ -56,27 +61,27 @@ export const sendMessage = async (req, res) => {
       io.to(receiverSocketId).emit("newMessage", tempMessage);
     }
 
-    // Handle image upload in parallel
-    if (image) {
-      const uploadImage = await cloudinary.uploader.upload(image);
-      imageUrl = uploadImage.secure_url;
-    }
+    // Upload image (if any) in parallel
+    const imageUploadPromise = image
+      ? cloudinary.uploader.upload(image, {
+          eager: [{ width: 300, height: 300, crop: "scale" }],
+          timeout: 5000,  // Set a timeout for Cloudinary
+        })
+      : null;
 
-    // Save to database in the background
+    // Save message to DB (non-blocking)
+    const [uploadResult] = await Promise.all([imageUploadPromise]);
+
     const message = new messageModel({
       senderId,
       receiverId,
       text,
-      image: imageUrl,
+      image: uploadResult ? uploadResult.secure_url : null,
     });
 
-    message.save().catch((error) => {
-      console.log("Message save failed:", error.message);
-    });
+    message.save().catch((error) => console.log("Message save failed:", error.message));
 
-    // Respond quickly to the frontend
     res.status(201).json(tempMessage);
-
   } catch (error) {
     console.log("Error in sendMessages controller:", error.message);
     res.status(500).json({ error: "Internal server error" });
