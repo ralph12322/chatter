@@ -42,34 +42,43 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user._id;
     let imageUrl = null;
 
-    if (image) {
-      try {
-        const uploadImage = await cloudinary.uploader.upload(image);
-        imageUrl = uploadImage.secure_url;
-      } catch (error) {
-        console.log("Could not upload image.", error.message);
-        return res.status(500).json({error: "Image upload failed"})
-      }
-    }
-
-    const message = new messageModel({
-      senderId: senderId,
-      receiverId: receiverId,
+    // Emit the message instantly to speed up UI feedback
+    const tempMessage = {
+      _id: new Date().getTime().toString(),  // Temporary ID for frontend
+      senderId,
+      receiverId,
       text,
-      image: imageUrl
-    })
-
-    await message.save();
+      image: null,
+      createdAt: new Date().toISOString(),
+    };
     const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit("newMessage", message);
+      io.to(receiverSocketId).emit("newMessage", tempMessage);
     }
 
-    res.status(201).json(message);
+    // Handle image upload in parallel
+    if (image) {
+      const uploadImage = await cloudinary.uploader.upload(image);
+      imageUrl = uploadImage.secure_url;
+    }
+
+    // Save to database in the background
+    const message = new messageModel({
+      senderId,
+      receiverId,
+      text,
+      image: imageUrl,
+    });
+
+    message.save().catch((error) => {
+      console.log("Message save failed:", error.message);
+    });
+
+    // Respond quickly to the frontend
+    res.status(201).json(tempMessage);
 
   } catch (error) {
-    console.log("Error in sendMessages controller: ", error.message);
+    console.log("Error in sendMessages controller:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
-
-}
+};
